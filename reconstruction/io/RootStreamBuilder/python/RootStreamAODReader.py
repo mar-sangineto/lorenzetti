@@ -12,10 +12,12 @@ class RootStreamAODReader( Cpp ):
                 OutputTruthKey    : str,
                 OutputClusterKey  : str,
                 OutputRingerKey   : str,
+                OutputRingerL0Key : str,
                 OutputSeedsKey    : str,
                 OutputElectronKey : str,
                 OutputTruthClusterKey : str,
                 OutputTruthRingerKey  : str,
+                OutputTruthElectronKey : str,
                 OutputLevel       : int=0, 
                 NtupleName        : str="CollectionTree",
               ): 
@@ -25,10 +27,12 @@ class RootStreamAODReader( Cpp ):
     self.setProperty( "OutputTruthKey"        , OutputTruthKey        )
     self.setProperty( "OutputClusterKey"      , OutputClusterKey      )
     self.setProperty( "OutputRingerKey"       , OutputRingerKey       )
+    self.setProperty( "OutputRingerL0Key"    , OutputRingerL0Key    )
     self.setProperty( "OutputSeedsKey"        , OutputSeedsKey        )
     self.setProperty( "OutputElectronKey"     , OutputElectronKey     )
     self.setProperty( "OutputTruthClusterKey" , OutputTruthClusterKey )
     self.setProperty( "OutputTruthRingerKey"  , OutputTruthRingerKey  )
+    self.setProperty( "OutputTruthElectronKey" , OutputTruthElectronKey )
     self.setProperty( "OutputLevel"           , OutputLevel           ) 
     self.setProperty( "NtupleName"            , NtupleName            )
     self.setProperty( "InputFile"             , InputFile             ) 

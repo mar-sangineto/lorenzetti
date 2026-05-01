@@ -56,6 +56,10 @@ class RootStreamNtupleMaker : public Gaugi::Algorithm
     std::string m_clusterKey;
     std::string m_ringerKey;
     std::string m_electronKey;
+    std::string m_ringerL0Key;
+    std::string m_truthClusterKey;
+    std::string m_truthRingerKey;
+    std::string m_truthElectronKey;
     std::string m_outputNtupleName;
   
 

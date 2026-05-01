@@ -86,6 +86,10 @@ def main(events : List[int],
                               OutputRingerKey      = recordable("Rings"),
                               OutputElectronKey    = recordable("Electrons"),
                               OutputSeedsKey       = recordable("Seeds"),
+                              OutputTruthClusterKey= recordable("TruthClusters"),
+                              OutputTruthRingerKey = recordable("TruthRings"),
+                              OutputRingerL0Key    = recordable("RingsL0"),
+                              OutputTruthElectronKey = recordable("TruthElectrons"),
                               NtupleName           = "CollectionTree",
                               )
 
@@ -97,8 +101,12 @@ def main(events : List[int],
                                   InputTruthKey        = recordable("Particles"),
                                   InputClusterKey      = recordable("Clusters"),
                                   InputRingerKey       = recordable("Rings"),
+                                  InputRingerL0Key    = recordable("RingsL0"),
                                   InputElectronKey     = recordable("Electrons"),
                                   InputSeedsKey        = recordable("Seeds"),
+                                  InputTruthClusterKey= recordable("TruthClusters"),
+                                  InputTruthRingerKey = recordable("TruthRings"),
+                                  InputTruthElectronKey = recordable("TruthElectrons"),
                                   OutputNtupleName     = "physics",
                                   )
 
