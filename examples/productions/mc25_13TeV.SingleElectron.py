@@ -13,9 +13,11 @@ run_number = now.strftime("%Y%m%d")
 parser = argparse.ArgumentParser(description="Script for job execution.")
 
 parser.add_argument('--run-name', type=str, default="", help="Run name") # to not overwrite or to continue training
-parser.add_argument('--out-path', type=str, default='/afs/cern.ch/user/m/msangine/results', help="Path to save the results")
+parser.add_argument('--out-path', type=str, default='./', help="Path to save the results")
 parser.add_argument('--cores', type=int, default=1, help="Number of allocated cores")
 parser.add_argument('--iterations', type=int, default=15, help="Total number of iterations (default: 15)")
+parser.add_argument('--events-number', type=int, default=2000, help="Number of events per iteration (default: 2000)")
+
 # cluster arguments:
 parser.add_argument('--proc-id', type=int, default=1, help="Current job ID") # in case of parallelizing the iteration in the cluster
 parser.add_argument('--cluster-id', type=str, default="", help="Cluster submission ID (prevents overwriting runs)") # for the cluster working in parallel queue instead of the iteration
@@ -25,7 +27,7 @@ args = parser.parse_args()
 allocated_cores = args.cores
 iterations_number = args.iterations
 
-events_per_chunk = 2000
+events_per_chunk = args.events_number
 run_name = args.run_name if args.run_name else run_number
 
 if args.cluster_id:
