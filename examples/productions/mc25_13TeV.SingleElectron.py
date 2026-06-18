@@ -36,6 +36,21 @@ if args.cluster_id:
 output_path=f"{args.out_path}/{run_name}"
 os.makedirs(output_path, exist_ok=True)
 
+txt_path = f"{output_path}/status.txt"
+
+print(f"Creating status file to check information on {txt_path}")
+
+with open(txt_path,'w') as f:
+    f.write("Arguments:\n")
+    f.write(f"Number of chuncks (iterations): {args.iterations}\n")
+    f.write(f"Number of events per chunck: {args.events_number}\n")
+    f.write(f"\n-------------------------------------------------------\n")
+    f.write(f"process and cluster id: {args.proc_id} ; {args.cluster_id}\n")
+    f.write(f"Used CPU cores: {args.cores}\n")
+    f.write(f"\n-------------------------------------------------------\n")
+
+print("arguments information added")
+
 print("Allocated cores = ", allocated_cores, "Number of iterations = ", iterations_number,\
         "events per iteration ", events_per_chunk,\
         "saved on ",output_path, file=sys.stderr, flush=True)
