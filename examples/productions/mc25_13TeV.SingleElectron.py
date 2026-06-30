@@ -2,13 +2,15 @@ import os
 import sys
 import subprocess
 import argparse
-import time
+import time # can be present just on auxiliary functions
 from datetime import datetime
 
-start_time = time.time()
+from auxiliary_functions import *
+
+start_time = time.time() # can be replaced by the existing one on the auxiliary functions
 
 now = datetime.now()
-run_number = now.strftime("%Y%m%d")
+run_number = now.strftime("%Y%m%d_%H%M")
 
 parser = argparse.ArgumentParser(description="Script for job execution.")
 
@@ -36,36 +38,23 @@ if args.cluster_id:
 output_path=f"{args.out_path}/{run_name}"
 os.makedirs(output_path, exist_ok=True)
 
-txt_path = f"{output_path}/status.txt"
+monitor = LorenzettiMonitor(output_path,args)
 
-print(f"Creating status file to check information on {txt_path}")
-
-with open(txt_path,'w') as f:
-    f.write("Arguments:\n")
-    f.write(f"Number of chuncks (iterations): {args.iterations}\n")
-    f.write(f"Number of events per chunck: {args.events_number}\n")
-    f.write(f"\n-------------------------------------------------------\n")
-    f.write(f"process and cluster id: {args.proc_id} ; {args.cluster_id}\n")
-    f.write(f"Used CPU cores: {args.cores}\n")
-    f.write(f"\n-------------------------------------------------------\n")
-
-print("arguments information added")
-
-print("Allocated cores = ", allocated_cores, "Number of iterations = ", iterations_number,\
-        "events per iteration ", events_per_chunk,\
-        "saved on ",output_path, file=sys.stderr, flush=True)
+# print("Allocated cores = ", allocated_cores, "Number of iterations = ", iterations_number,\
+#         "events per iteration ", events_per_chunk,\
+#         "saved on ",output_path, file=sys.stderr, flush=True)
 
 # Create folder structure for each stage
 stages = ['step_1', 'step_2', 'step_3', 'step_4', 'step_5']
 for stage in stages:
     os.makedirs(f"{output_path}/{stage}", exist_ok=True)
 
-def is_step_completed(filepath):
-    """
-    To avoid skipping steps based on corrupted/empty files
-    Checks if the file exists and has a reasonable size (> 1KB)
-    """
-    return os.path.exists(filepath) and os.path.getsize(filepath) > 1024
+# def is_step_completed(filepath):
+#     """
+#     To skip steps based on corrupted/empty files
+#     Checks if the file exists and has a reasonable size (> 1KB)
+#     """
+#     return os.path.exists(filepath) and os.path.getsize(filepath) > 1024
 
 print(f"=== Starting production of {iterations_number} files with {events_per_chunk} events ===")
 
@@ -87,6 +76,7 @@ for iteration in range(iterations_number):
     ntup_file = f"{output_path}/step_5/Electron.{iteration}.root"
 
     # --- STEP 1: GENERATION (EVT) ---
+    monitor.update_live_status(iteration, "EVT (Generation)")
     if is_step_completed(evt_file):
         print("Generation already completed")
     else:
@@ -101,36 +91,45 @@ for iteration in range(iterations_number):
             "-s", str(seed), "--run-number", str(run_number)
         ]
         subprocess.run(cmd_evt, check=True)
+        monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
 
     # --- STEP 2: DETECTOR SIMULATION (HIT) ---
+    monitor.update_live_status(iteration, "HIT (Simulation)")
     if is_step_completed(hit_file):
         print("HIT already done, skipping this part")
     else:
         print(f"-> [2/5] Running Simulation (simu_trf.py) for iteration {iteration}...")
         cmd_hit = ["simu_trf.py", "-i", evt_file, "-o", hit_file, "-nt", str(allocated_cores)]
         subprocess.run(cmd_hit, check=True)
+        monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
     # --- STEP 3: DIGITALIZAÇÃO (ESD) ---
+    monitor.update_live_status(iteration, "ESD (Digitization)")
     if is_step_completed(esd_file):
         print("ESD already completed")
     else:
         print(f"-> [3/5] Running Digitization (digit_trf.py) for iteration {iteration}...")
         cmd_esd = ["digit_trf.py", "-i", hit_file, "-o", esd_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
         subprocess.run(cmd_esd, check=True)
+        monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
     # --- STEP 4: RECONSTRUCTION (AOD) ---
+    # monitor.update_live_status(iteration, "AOD (Reconstruction)")
     # print(f"-> [4/5] Running Reconstruction (reco_trf.py) for iteration {iteration}...")
     # cmd_aod = ["reco_trf.py", "-i", esd_file, "-o", aod_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
     # subprocess.run(cmd_aod, check=True)
+    # monitor.log_step_time()
 
     # # --- STEP 5: FINAL NTUPLE ---
+    # monitor.update_live_status(iteration, "NTUP (Ntuple)")
     # print(f"-> [5/5] Generating Final Ntuple (ntuple_trf.py) for iteration {iteration}...")
     # cmd_ntup = ["ntuple_trf.py", "-i", aod_file, "-o", ntup_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
     # subprocess.run(cmd_ntup, check=True)
+    # monitor.log_step_time()
 
 end_time = time.time()
 total_duration = end_time - start_time
