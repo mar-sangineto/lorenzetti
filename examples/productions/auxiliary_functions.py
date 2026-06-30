@@ -97,7 +97,7 @@ class LorenzettiMonitor:
             with open('/proc/cpuinfo', 'r') as f:
                 for line in f:
                     if 'model name' in line:
-                        cpu_model = line.split(':')[1].strip()
+                        machine_specs['cpu_model'] = line.split(':')[1].strip()
                         break
             machine_specs['total_cores'] = os.cpu_count()
         except Exception:
@@ -118,21 +118,24 @@ class LorenzettiMonitor:
 
     def _avg_step_time(self):
         """Calculates the average time to run a specific each step."""
-
-        step_avg_time = {}
-
+        avgs = {}
         for step_name, times in self.step_times.items():
-            if times:
-                avg_time = sum(times) / len(times)
-                step_avg_time[step_name] = avg_time
-            else:
-                step_avg_time[step_name] = None
+            avgs[step_name] = (sum(times) / len(times)) if times else None
+        return avgs
+ 
+    def _avg_iteration_time(self):
+        """Sum of the avg time of every step that has at least one data point."""
+        avgs = self._avg_step_time()
+        known = [v for v in avgs.values() if v is not None]
+        return sum(known) if known else None
 
-        return step_avg_time
     
     def _estimated_time(self):
-        avgs = self._avg_step_time()
-        avg_iter_time = sum(avgs)
+        avg_iter_time = self._avg_iteration_time()
+
+        if not avg_iter_time:
+            print('Not enought time samples')
+            return None
 
         remaining_iters = self.total_iters - (self.current_iter + 1)
         estimated_seconds = remaining_iters * avg_iter_time
@@ -166,7 +169,7 @@ class LorenzettiMonitor:
         """Records the node's hardware specifications to a text file."""
 
         lines = []
-        specs = self.machine_specs()
+        specs = self._collect_machine_specs()
 
         lines = []
         lines.append("=========================================\n")
@@ -176,7 +179,7 @@ class LorenzettiMonitor:
         lines.append(f"Node Hostname: {specs['node_hostname']}\n")
         lines.append(f"OS Platform: {specs['os_platform']}\n")
         lines.append(f"Python Version: {specs['python_version']}\n")
-        lines.append(f"Allocated HTCondor Cores: {self.allocated_cores}\n")
+        lines.append(f"Allocated HTCondor Cores: {self.args.cores}\n")
         lines.append(f"Total Machine Cores: {specs['total_cores']}\n")
         lines.append(f"CPU Model: {specs['cpu_model']}\n")
         lines.append(f"Total Machine RAM: {specs['total_mem_gb']} GB\n")
@@ -191,22 +194,28 @@ class LorenzettiMonitor:
         lines.append("=========================================\n")
         lines.append("ARGUMENTS\n")
         lines.append("=========================================\n")
-        # lines.append(f"Number of chuncks (iterations): {self.args.iterations}\n")
-        # lines.append(f"Number of events per chunck: {self.args.events_number}\n")
-        # lines.append(f"\n-------------------------------------------------------\n")
-        # lines.append(f"process and cluster id: {self.args.proc_id} ; {self.args.cluster_id}\n")
-        # lines.append(f"Used CPU cores: {self.args.cores}\n")
-        # lines.append(f"\n-------------------------------------------------------\n")
         for arg_name, arg_value in vars(self.args).items():
             lines.append(f"{arg_name}: {arg_value}\n")
         
         lines.append("")
         return lines
     
+    def _record_raw_history(self):
+        """Records the time of every individual run for each step."""
+        lines = []
+        lines.append("--- Raw History (All Iterations) ---")
+        for step_name, times in self.step_times.items():
+            if not times:
+                lines.append(f"{step_name}: No data yet.")
+            else:
+                lines.append(f"{step_name}: {times}")
+        lines.append("")
+        return lines
+    
     def _record_avg_time(self):
         lines = []
         lines.append("--- Average Time Per Step ---")
-        for step_name, avg in self._avg_step_times().items():
+        for step_name, avg in self._avg_step_time().items():
             n = len(self.step_times[step_name])
             if avg is not None:
                 h, m, s = format_time(avg)
@@ -232,8 +241,7 @@ class LorenzettiMonitor:
         lines.append("")
         return lines
 
-
-    # record them all:
+    ### record them all:
 
     def _write_status(self):
         lines = []
@@ -244,6 +252,7 @@ class LorenzettiMonitor:
         lines += self._record_machine_specs()
         lines += self._record_avg_time()
         lines += self._record_time_estimate()
+        lines += self._record_raw_history()
 
         tmp_path = self.status_file_path + ".tmp"
         with open(tmp_path, 'w') as f:

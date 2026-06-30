@@ -10,7 +10,7 @@ from auxiliary_functions import *
 start_time = time.time() # can be replaced by the existing one on the auxiliary functions
 
 now = datetime.now()
-run_number = now.strftime("%Y%m%d_%H%M")
+run_number = now.strftime("%Y%m%d")
 
 parser = argparse.ArgumentParser(description="Script for job execution.")
 
@@ -30,7 +30,7 @@ allocated_cores = args.cores
 iterations_number = args.iterations
 
 events_per_chunk = args.events_number
-run_name = args.run_name if args.run_name else run_number
+run_name = args.run_name if args.run_name else now.strftime("%Y%m%d_%H%M")
 
 if args.cluster_id:
     run_name = f"{run_name}_c{args.cluster_id}_{args.proc_id}"
@@ -40,21 +40,14 @@ os.makedirs(output_path, exist_ok=True)
 
 monitor = LorenzettiMonitor(output_path,args)
 
-# print("Allocated cores = ", allocated_cores, "Number of iterations = ", iterations_number,\
-#         "events per iteration ", events_per_chunk,\
-#         "saved on ",output_path, file=sys.stderr, flush=True)
+print("Allocated cores = ", allocated_cores, "Number of iterations = ", iterations_number,\
+        "events per iteration ", events_per_chunk,\
+        "saved on ",output_path, file=sys.stderr, flush=True)
 
 # Create folder structure for each stage
 stages = ['step_1', 'step_2', 'step_3', 'step_4', 'step_5']
 for stage in stages:
     os.makedirs(f"{output_path}/{stage}", exist_ok=True)
-
-# def is_step_completed(filepath):
-#     """
-#     To skip steps based on corrupted/empty files
-#     Checks if the file exists and has a reasonable size (> 1KB)
-#     """
-#     return os.path.exists(filepath) and os.path.getsize(filepath) > 1024
 
 print(f"=== Starting production of {iterations_number} files with {events_per_chunk} events ===")
 
@@ -62,7 +55,7 @@ for iteration in range(iterations_number):
     if iterations_number==1:
         iteration = args.proc_id
     print(f"\n==========================================")
-    print(f" PROCESSING ITERATION {iteration} / {iterations_number - 1}")
+    print(f" PROCESSING ITERATION {iteration + 1} / {iterations_number}")
     print(f"==========================================")
     
     # Calculate a unique seed for each iteration or job based on ID
