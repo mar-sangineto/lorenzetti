@@ -2,6 +2,7 @@ import os
 import time
 import socket
 import platform
+import subprocess
 import sys
 from datetime import datetime
 
@@ -12,6 +13,21 @@ def is_step_completed(filepath):
     Checks if the file exists and has a reasonable size (> 1KB)
     """
     return os.path.exists(filepath) and os.path.getsize(filepath) > 1024
+
+def split_events(n_events, n_bins):
+    """Splits n_events as evenly as possible across n_bins non-empty bins."""
+    n_bins = max(1, min(n_bins, n_events))
+    base, remainder = divmod(n_events, n_bins)
+    return [base + (1 if i < remainder else 0) for i in range(n_bins)]
+
+def merge_root_files(output_file, files):
+    """Merges a list of ROOT files into output_file (via hadd) and removes the inputs."""
+    if len(files) == 1:
+        os.replace(files[0], output_file)
+        return
+    subprocess.run(["hadd", "-f", output_file] + files, check=True)
+    for f in files:
+        os.remove(f)
 
 def format_time(seconds):
     """Converts seconds into a readable HH:MM:SS format."""

@@ -3,9 +3,11 @@ import sys
 import subprocess
 import argparse
 import time # can be present just on auxiliary functions
+import numpy as np
 from datetime import datetime
 
 from auxiliary_functions import *
+from energy_samplers import get_energies, SUPPORTED_DISTRIBUTIONS
 
 start_time = time.time() # can be replaced by the existing one on the auxiliary functions
 
@@ -19,6 +21,20 @@ parser.add_argument('--out-path', type=str, default='./', help="Path to save the
 parser.add_argument('--cores', type=int, default=1, help="Number of allocated cores")
 parser.add_argument('--iterations', type=int, default=15, help="Total number of iterations (default: 15)")
 parser.add_argument('--events-number', type=int, default=2000, help="Number of events per iteration (default: 2000)")
+
+# particle gun kinematics:
+parser.add_argument('--eta-min', type=float, default=-2.5, help="Minimum eta (default: -2.5)")
+parser.add_argument('--eta-max', type=float, default=2.5, help="Maximum eta (default: 2.5)")
+parser.add_argument('--phi-min', type=float, default=-3.1415, help="Minimum phi (default: -3.1415)")
+parser.add_argument('--phi-max', type=float, default=3.1415, help="Maximum phi (default: 3.1415)")
+parser.add_argument('--energy-min', type=float, default=2, help="Minimum energy in GeV (default: 2)")
+parser.add_argument('--energy-max', type=float, default=7000, help="Maximum energy in GeV (default: 7000)")
+parser.add_argument('--energy-dist', type=str, default="log", choices=SUPPORTED_DISTRIBUTIONS,
+                    help=f"Shape of the energy spectrum to sample from, i.e. how non-homogeneously "
+                         f"energies are distributed (default: log). Choices: {SUPPORTED_DISTRIBUTIONS}")
+parser.add_argument('--energy-bins', type=int, default=50,
+                    help="Number of distinct energy values drawn from --energy-dist per iteration; "
+                         "events are split evenly across them to build the energy spectrum (default: 50)")
 
 # cluster arguments:
 parser.add_argument('--proc-id', type=int, default=1, help="Current job ID") # in case of parallelizing the iteration in the cluster
@@ -74,16 +90,33 @@ for iteration in range(iterations_number):
         print("Generation already completed")
     else:
         print(f"-> [1/5] Running Generation (gen_single.py) for iteration {iteration}...")
-        cmd_evt = [
-                "gen_single.py", "-p", "Electron", "-o", evt_file,
-            "--nov", str(events_per_chunk), "--events-per-job", str(events_per_chunk),
-            "--do-eta-ranged", "a", "--do-phi-ranged", "a",
-            "--eta-min", "-2.5", "--eta-max", "2.5",
-            "--phi-min", "-3.1415", "--phi-max", "3.1415",
-            "--energy-min", "2", "--energy-max", "7000", "--energy", "0",
-            "-s", str(seed), "--run-number", str(run_number)
-        ]
-        subprocess.run(cmd_evt, check=True)
+
+        # gen_single.py only supports a single fixed energy (or a flat range) per
+        # call, so a non-homogeneous spectrum is built here by drawing --energy-bins
+        # fixed energies from --energy-dist and splitting the events across them.
+        np.random.seed(seed)
+        n_bins = max(1, min(args.energy_bins, events_per_chunk))
+        bin_energies = get_energies(args.energy_dist, args.energy_min, args.energy_max, n_bins)
+        bin_events = split_events(events_per_chunk, n_bins)
+
+        bin_files = []
+        for bin_idx, (bin_energy, bin_nov) in enumerate(zip(bin_energies, bin_events)):
+            if bin_nov == 0:
+                continue
+            bin_file = f"{output_path}/step_1/Electron.EVT.{iteration}.bin{bin_idx}.root"
+            cmd_evt = [
+                "gen_single.py", "-p", "Electron", "-o", bin_file,
+                "--nov", str(bin_nov), "--events-per-job", str(bin_nov),
+                "--do-eta-ranged", "a", "--do-phi-ranged", "a",
+                "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
+                "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
+                "--energy", str(bin_energy),
+                "-s", str(seed * 1000 + bin_idx), "--run-number", str(run_number)
+            ]
+            subprocess.run(cmd_evt, check=True)
+            bin_files.append(bin_file)
+
+        merge_root_files(evt_file, bin_files)
         monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 

@@ -1,5 +1,9 @@
 import numpy as np
 
+# Distributions that can be selected from the command line (i.e. that don't
+# require a python callable). Keep this in sync with get_energies() below.
+SUPPORTED_DISTRIBUTIONS = ["linear", "log", "fermi"]
+
 
 def sample_linear(min_e, max_e, n_events):
     """Samples energies from a uniform linear distribution."""
