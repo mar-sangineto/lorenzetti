@@ -21,6 +21,8 @@ parser.add_argument('--out-path', type=str, default='./', help="Path to save the
 parser.add_argument('--cores', type=int, default=1, help="Number of allocated cores")
 parser.add_argument('--iterations', type=int, default=15, help="Total number of iterations (default: 15)")
 parser.add_argument('--events-number', type=int, default=2000, help="Number of events per iteration (default: 2000)")
+parser.add_argument('--last-step', type=int, default=2, choices=range(5),
+                    help="Last pipeline step to run. 0-EVT 1-HIT 2-ESD 3-AOD 4-NTUP (default: 2-ESD)")
 
 # particle gun kinematics:
 parser.add_argument('--eta-min', type=float, default=-2.5, help="Minimum eta (default: -2.5)")
@@ -44,6 +46,7 @@ args = parser.parse_args()
 
 allocated_cores = args.cores
 iterations_number = args.iterations
+last_step_idx = args.last_step
 
 events_per_chunk = args.events_number
 run_name = args.run_name if args.run_name else now.strftime("%Y%m%d_%H%M")
@@ -61,9 +64,8 @@ print("Allocated cores = ", allocated_cores, "Number of iterations = ", iteratio
         "saved on ",output_path, file=sys.stderr, flush=True)
 
 # Create folder structure for each stage
-stages = ['step_1', 'step_2', 'step_3', 'step_4', 'step_5']
-for stage in stages:
-    os.makedirs(f"{output_path}/{stage}", exist_ok=True)
+for i in range(5):
+    os.makedirs(f"{output_path}/stage_{i}", exist_ok=True)
 
 print(f"=== Starting production of {iterations_number} files with {events_per_chunk} events ===")
 
@@ -84,78 +86,89 @@ for iteration in range(iterations_number):
     aod_file = f"{output_path}/step_4/Electron.AOD.{iteration}.root"
     ntup_file = f"{output_path}/step_5/Electron.{iteration}.root"
 
-    # --- STEP 1: GENERATION (EVT) ---
-    monitor.update_live_status(iteration, "EVT (Generation)")
-    if is_step_completed(evt_file):
-        print("Generation already completed")
-    else:
-        print(f"-> [1/5] Running Generation (gen_single.py) for iteration {iteration}...")
+    # --- STEP 0: GENERATION (EVT) ---
+    if last_step_idx >= 0:
+        monitor.update_live_status(iteration, "EVT (Generation)")
+        if is_step_completed(evt_file):
+            print("Generation already completed")
+        else:
+            print(f"-> [1/5] Running Generation (gen_single.py) for iteration {iteration}...")
 
-        # gen_single.py only supports a single fixed energy (or a flat range) per
-        # call, so a non-homogeneous spectrum is built here by drawing --energy-bins
-        # fixed energies from --energy-dist and splitting the events across them.
-        np.random.seed(seed)
-        n_bins = max(1, min(args.energy_bins, events_per_chunk))
-        bin_energies = get_energies(args.energy_dist, args.energy_min, args.energy_max, n_bins)
-        bin_events = split_events(events_per_chunk, n_bins)
+            # gen_single.py only supports a single fixed energy (or a flat range) per
+            # call, so a non-homogeneous spectrum is built here by drawing --energy-bins
+            # fixed energies from --energy-dist and splitting the events across them.
+            np.random.seed(seed)
+            n_bins = max(1, min(args.energy_bins, events_per_chunk))
+            bin_energies = get_energies(args.energy_dist, args.energy_min, args.energy_max, n_bins)
+            bin_events = split_events(events_per_chunk, n_bins)
 
-        bin_files = []
-        for bin_idx, (bin_energy, bin_nov) in enumerate(zip(bin_energies, bin_events)):
-            if bin_nov == 0:
-                continue
-            bin_file = f"{output_path}/step_1/Electron.EVT.{iteration}.bin{bin_idx}.root"
-            cmd_evt = [
-                "gen_single.py", "-p", "Electron", "-o", bin_file,
-                "--nov", str(bin_nov), "--events-per-job", str(bin_nov),
-                "--do-eta-ranged", "a", "--do-phi-ranged", "a",
-                "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
-                "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
-                "--energy", str(bin_energy),
-                "-s", str(seed * 1000 + bin_idx), "--run-number", str(run_number)
-            ]
-            subprocess.run(cmd_evt, check=True)
-            bin_files.append(bin_file)
+            bin_files = []
+            for bin_idx, (bin_energy, bin_nov) in enumerate(zip(bin_energies, bin_events)):
+                if bin_nov == 0:
+                    continue
+                bin_file = f"{output_path}/step_1/Electron.EVT.{iteration}.bin{bin_idx}.root"
+                cmd_evt = [
+                    "gen_single.py", "-p", "Electron", "-o", bin_file,
+                    "--nov", str(bin_nov), "--events-per-job", str(bin_nov),
+                    "--do-eta-ranged", str(args.eta_min==args.eta_max), "--do-phi-ranged", str(args.phi_min==args.phi_max),
+                    "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
+                    "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
+                    "--energy", str(bin_energy),
+                    "-s", str(seed * 1000 + bin_idx), "--run-number", str(run_number)
+                ]
+                subprocess.run(cmd_evt, check=True)
+                bin_files.append(bin_file)
 
-        merge_root_files(evt_file, bin_files)
+            merge_root_files(evt_file, bin_files)
         monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
 
-    # --- STEP 2: DETECTOR SIMULATION (HIT) ---
-    monitor.update_live_status(iteration, "HIT (Simulation)")
-    if is_step_completed(hit_file):
-        print("HIT already done, skipping this part")
-    else:
-        print(f"-> [2/5] Running Simulation (simu_trf.py) for iteration {iteration}...")
-        cmd_hit = ["simu_trf.py", "-i", evt_file, "-o", hit_file, "-nt", str(allocated_cores)]
-        subprocess.run(cmd_hit, check=True)
+    # --- STEP 1: DETECTOR SIMULATION (HIT) ---
+    if last_step_idx >= 1:
+        monitor.update_live_status(iteration, "HIT (Simulation)")
+        if is_step_completed(hit_file):
+            print("HIT already done, skipping this part")
+        else:
+            print(f"-> [2/5] Running Simulation (simu_trf.py) for iteration {iteration}...")
+            cmd_hit = ["simu_trf.py", "-i", evt_file, "-o", hit_file, "-nt", str(allocated_cores)]
+            subprocess.run(cmd_hit, check=True)
         monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
-    # --- STEP 3: DIGITALIZAÇÃO (ESD) ---
-    monitor.update_live_status(iteration, "ESD (Digitization)")
-    if is_step_completed(esd_file):
-        print("ESD already completed")
-    else:
-        print(f"-> [3/5] Running Digitization (digit_trf.py) for iteration {iteration}...")
-        cmd_esd = ["digit_trf.py", "-i", hit_file, "-o", esd_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
-        subprocess.run(cmd_esd, check=True)
+    # --- STEP 2: DIGITALIZAÇÃO (ESD) ---
+    if last_step_idx >= 2:
+        monitor.update_live_status(iteration, "ESD (Digitization)")
+        if is_step_completed(esd_file):
+            print("ESD already completed")
+        else:
+            print(f"-> [3/5] Running Digitization (digit_trf.py) for iteration {iteration}...")
+            cmd_esd = ["digit_trf.py", "-i", hit_file, "-o", esd_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
+            subprocess.run(cmd_esd, check=True)
         monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
-    # --- STEP 4: RECONSTRUCTION (AOD) ---
-    # monitor.update_live_status(iteration, "AOD (Reconstruction)")
-    # print(f"-> [4/5] Running Reconstruction (reco_trf.py) for iteration {iteration}...")
-    # cmd_aod = ["reco_trf.py", "-i", esd_file, "-o", aod_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
-    # subprocess.run(cmd_aod, check=True)
-    # monitor.log_step_time()
+    # --- STEP 3: RECONSTRUCTION (AOD) ---
+    if last_step_idx >= 3:
+        monitor.update_live_status(iteration, "AOD (Reconstruction)")
+        if is_step_completed(aod_file):
+            print("AOD already completed")
+        else:
+            print(f"-> [4/5] Running Reconstruction (reco_trf.py) for iteration {iteration}...")
+            cmd_aod = ["reco_trf.py", "-i", esd_file, "-o", aod_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
+            subprocess.run(cmd_aod, check=True)
+            monitor.log_step_time()
 
-    # # --- STEP 5: FINAL NTUPLE ---
-    # monitor.update_live_status(iteration, "NTUP (Ntuple)")
-    # print(f"-> [5/5] Generating Final Ntuple (ntuple_trf.py) for iteration {iteration}...")
-    # cmd_ntup = ["ntuple_trf.py", "-i", aod_file, "-o", ntup_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
-    # subprocess.run(cmd_ntup, check=True)
-    # monitor.log_step_time()
+    # --- STEP 4: FINAL NTUPLE ---
+    if last_step_idx >= 4:
+        monitor.update_live_status(iteration, "NTUP (Ntuple)")
+        if is_step_completed(ntup_file):
+            print("NTUP already completed")
+        else:
+            print(f"-> [5/5] Generating Final Ntuple (ntuple_trf.py) for iteration {iteration}...")
+            cmd_ntup = ["ntuple_trf.py", "-i", aod_file, "-o", ntup_file, "-nt", str(allocated_cores), "--events-per-job", str(events_per_chunk), "-m"]
+            subprocess.run(cmd_ntup, check=True)
+        monitor.log_step_time()
 
 end_time = time.time()
 total_duration = end_time - start_time
