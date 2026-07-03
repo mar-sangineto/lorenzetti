@@ -81,11 +81,11 @@ for iteration in range(iterations_number):
     monitor.log_master_seed(iteration, seed)
     
     # Definition of file names for this specific iteration
-    evt_file = f"{output_path}/step_1/Electron.EVT.{iteration}.root"
-    hit_file = f"{output_path}/step_2/Electron.HIT.{iteration}.root"
-    esd_file = f"{output_path}/step_3/Electron.ESD.{iteration}.root"
-    aod_file = f"{output_path}/step_4/Electron.AOD.{iteration}.root"
-    ntup_file = f"{output_path}/step_5/Electron.{iteration}.root"
+    evt_file = f"{output_path}/step_0/Electron.EVT.{iteration}.root"
+    hit_file = f"{output_path}/step_1/Electron.HIT.{iteration}.root"
+    esd_file = f"{output_path}/step_2/Electron.ESD.{iteration}.root"
+    aod_file = f"{output_path}/step_3/Electron.AOD.{iteration}.root"
+    ntup_file = f"{output_path}/step_4/Electron.{iteration}.root"
 
     # --- STEP 0: GENERATION (EVT) ---
     if last_step_idx >= 0:
@@ -95,34 +95,46 @@ for iteration in range(iterations_number):
         else:
             print(f"-> [1/5] Running Generation (gen_single.py) for iteration {iteration}...")
 
-            # gen_single.py only supports a single fixed energy (or a flat range) per
-            # call, so a non-homogeneous spectrum is built here by drawing --energy-bins
-            # fixed energies from --energy-dist and splitting the events across them.
-            np.random.seed(seed)
-            n_bins = max(1, min(args.energy_bins, events_per_chunk))
-            bin_energies = get_energies(args.energy_dist, args.energy_min, args.energy_max, n_bins)
-            bin_events = split_events(events_per_chunk, n_bins)
-
-            bin_files = []
-            for bin_idx, (bin_energy, bin_nov) in enumerate(zip(bin_energies, bin_events)):
-                if bin_nov == 0:
-                    continue
-                bin_file = f"{output_path}/step_1/Electron.EVT.{iteration}.bin{bin_idx}.root"
-                bin_seed = seed * 1000 + bin_idx
-                monitor.log_bin_seed(iteration, bin_idx, bin_seed, bin_energy)
+            if args.energy_dist == "linear":
                 cmd_evt = [
-                    "gen_single.py", "-p", "Electron", "-o", bin_file,
-                    "--nov", str(bin_nov), "--events-per-job", str(bin_nov),
+                    "gen_single.py", "-p", "Electron", "-o", evt_file,
+                    "--nov", str(events_per_chunk), "--events-per-job", str(events_per_chunk),
                     "--do-eta-ranged", str(args.eta_min==args.eta_max), "--do-phi-ranged", str(args.phi_min==args.phi_max),
                     "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
                     "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
-                    "--energy", str(bin_energy),
-                    "-s", str(bin_seed), "--run-number", str(run_number)
+                    "--energy-min", str(args.energy_min), "--energy-max", str(args.energy_max),
+                    "-s", str(seed), "--run-number", str(run_number)
                 ]
                 subprocess.run(cmd_evt, check=True)
-                bin_files.append(bin_file)
+            else:
+                # gen_single.py only supports a single fixed energy (or a flat range) per
+                # call, so a non-homogeneous spectrum is built here by drawing --energy-bins
+                # fixed energies from --energy-dist and splitting the events across them.
+                np.random.seed(seed)
+                n_bins = max(1, min(args.energy_bins, events_per_chunk))
+                bin_energies = get_energies(args.energy_dist, args.energy_min, args.energy_max, n_bins)
+                bin_events = split_events(events_per_chunk, n_bins)
 
-            merge_root_files(evt_file, bin_files)
+                bin_files = []
+                for bin_idx, (bin_energy, bin_nov) in enumerate(zip(bin_energies, bin_events)):
+                    if bin_nov == 0:
+                        continue
+                    bin_file = f"{output_path}/step_1/Electron.EVT.{iteration}.bin{bin_idx}.root"
+                    bin_seed = seed * 1000 + bin_idx
+                    monitor.log_bin_seed(iteration, bin_idx, bin_seed, bin_energy)
+                    cmd_evt = [
+                        "gen_single.py", "-p", "Electron", "-o", bin_file,
+                        "--nov", str(bin_nov), "--events-per-job", str(bin_nov),
+                        "--do-eta-ranged", str(args.eta_min==args.eta_max), "--do-phi-ranged", str(args.phi_min==args.phi_max),
+                        "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
+                        "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
+                        "--energy", str(bin_energy),
+                        "-s", str(bin_seed), "--run-number", str(run_number)
+                    ]
+                    subprocess.run(cmd_evt, check=True)
+                    bin_files.append(bin_file)
+
+                merge_root_files(evt_file, bin_files)
         monitor.log_step_time()
         print(f"it tooked {time.time()-start_time}", file=sys.stderr, flush=True)
 
