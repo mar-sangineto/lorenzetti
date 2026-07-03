@@ -64,6 +64,9 @@ class LorenzettiMonitor:
         self.machine_specs_dict = None
         self.finished = False
 
+        self.seeds = {}
+        self.bin_seeds = {}
+
         self.machine_specs_dict = self._collect_machine_specs()
 
         self._write_status()
@@ -88,6 +91,17 @@ class LorenzettiMonitor:
     def mark_finished(self):
         """Call at the end of the full code."""
         self.finished = True
+        self._write_status()
+
+    def log_master_seed(self, iteration, seed):
+        """Call once per iteration, right after computing its master seed."""
+        self.seeds[iteration] = seed
+        self.bin_seeds.setdefault(iteration, [])
+        self._write_status()
+
+    def log_bin_seed(self, iteration, bin_idx, seed, energy):
+        """Call once per energy bin, right after computing its gen_single seed."""
+        self.bin_seeds.setdefault(iteration, []).append((bin_idx, seed, energy))
         self._write_status()
 
     ### to get the values :
@@ -232,8 +246,9 @@ class LorenzettiMonitor:
         lines = []
 
         avg_iter = self._avg_iteration_time()
-        h1, m1, s1 = format_time(avg_iter)
-        lines.append(f"Average Time Per Iteration: ~{h1}h {m1}m {s1}s")
+        if avg_iter is not None:
+            h1, m1, s1 = format_time(avg_iter)
+            lines.append(f"Average Time Per Iteration: ~{h1}h {m1}m {s1}s")
 
         lines.append("--- Average Time Per Step ---")
         for step_name, avg in self._avg_step_time().items():
@@ -261,6 +276,21 @@ class LorenzettiMonitor:
             lines.append("Estimated Time: not enough data yet (waiting for first step to complete)")
         lines.append("")
         return lines
+    
+    def _record_seeds(self):
+        """Records every seed used, for full reproducibility of each iteration."""
+        lines = []
+        lines.append("=========================================")
+        lines.append("SEEDS (for reproducibility)")
+        lines.append("=========================================")
+        if not self.seeds:
+            lines.append("No seeds recorded yet.")
+        for iteration in sorted(self.seeds):
+            lines.append(f"Iteration {iteration}: seed = {self.seeds[iteration]}")
+            for bin_idx, seed, energy in self.bin_seeds.get(iteration, []):
+                lines.append(f"    bin {bin_idx}: gen_single seed = {seed}, energy = {energy:.4f} GeV")
+        lines.append("")
+        return lines
 
     ### record them all:
 
@@ -273,6 +303,7 @@ class LorenzettiMonitor:
         lines += self._record_machine_specs()
         lines += self._record_avg_time()
         lines += self._record_time_estimate()
+        lines += self._record_seeds()
         lines += self._record_raw_history()
 
         tmp_path = self.status_file_path + ".tmp"

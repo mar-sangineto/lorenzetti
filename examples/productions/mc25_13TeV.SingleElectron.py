@@ -39,8 +39,8 @@ parser.add_argument('--energy-bins', type=int, default=50,
                          "events are split evenly across them to build the energy spectrum (default: 50)")
 
 # cluster arguments:
-parser.add_argument('--proc-id', type=int, default=1, help="Current job ID") # in case of parallelizing the iteration in the cluster
-parser.add_argument('--cluster-id', type=str, default="", help="Cluster submission ID (prevents overwriting runs)") # for the cluster working in parallel queue instead of the iteration
+parser.add_argument('--proc-id', type=int, default=0, help="Current job ID") # in case of parallelizing the iteration in the cluster
+parser.add_argument('--cluster-id', type=int, default=0, help="Cluster submission ID (prevents overwriting runs)") # for the cluster working in parallel queue instead of the iteration
 
 args = parser.parse_args()
 
@@ -77,7 +77,8 @@ for iteration in range(iterations_number):
     print(f"==========================================")
     
     # Calculate a unique seed for each iteration or job based on ID
-    seed = 16 * (1 + iteration)
+    seed = args.cluster_id * 1_000_000 + args.proc_id * 10_000 + (1 + iteration)
+    monitor.log_master_seed(iteration, seed)
     
     # Definition of file names for this specific iteration
     evt_file = f"{output_path}/step_1/Electron.EVT.{iteration}.root"
@@ -107,6 +108,8 @@ for iteration in range(iterations_number):
                 if bin_nov == 0:
                     continue
                 bin_file = f"{output_path}/step_1/Electron.EVT.{iteration}.bin{bin_idx}.root"
+                bin_seed = seed * 1000 + bin_idx
+                monitor.log_bin_seed(iteration, bin_idx, bin_seed, bin_energy)
                 cmd_evt = [
                     "gen_single.py", "-p", "Electron", "-o", bin_file,
                     "--nov", str(bin_nov), "--events-per-job", str(bin_nov),
@@ -114,7 +117,7 @@ for iteration in range(iterations_number):
                     "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
                     "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
                     "--energy", str(bin_energy),
-                    "-s", str(seed * 1000 + bin_idx), "--run-number", str(run_number)
+                    "-s", str(bin_seed), "--run-number", str(run_number)
                 ]
                 subprocess.run(cmd_evt, check=True)
                 bin_files.append(bin_file)
