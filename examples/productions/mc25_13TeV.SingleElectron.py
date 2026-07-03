@@ -17,7 +17,7 @@ run_number = now.strftime("%Y%m%d")
 parser = argparse.ArgumentParser(description="Script for job execution.")
 
 parser.add_argument('--run-name', type=str, default="", help="Run name") # to not overwrite or to continue training
-parser.add_argument('--out-path', type=str, default='./', help="Path to save the results")
+parser.add_argument('--out-path', type=str, default='.', help="Path to save the results")
 parser.add_argument('--cores', type=int, default=1, help="Number of allocated cores")
 parser.add_argument('--iterations', type=int, default=15, help="Total number of iterations (default: 15)")
 parser.add_argument('--events-number', type=int, default=2000, help="Number of events per iteration (default: 2000)")
@@ -31,7 +31,7 @@ parser.add_argument('--phi-min', type=float, default=-3.1415, help="Minimum phi 
 parser.add_argument('--phi-max', type=float, default=3.1415, help="Maximum phi (default: 3.1415)")
 parser.add_argument('--energy-min', type=float, default=2, help="Minimum energy in GeV (default: 2)")
 parser.add_argument('--energy-max', type=float, default=7000, help="Maximum energy in GeV (default: 7000)")
-parser.add_argument('--energy-dist', type=str, default="log", choices=SUPPORTED_DISTRIBUTIONS,
+parser.add_argument('--energy-dist', type=str, default="linear", choices=SUPPORTED_DISTRIBUTIONS,
                     help=f"Shape of the energy spectrum to sample from, i.e. how non-homogeneously "
                          f"energies are distributed (default: log). Choices: {SUPPORTED_DISTRIBUTIONS}")
 parser.add_argument('--energy-bins', type=int, default=50,
@@ -65,7 +65,7 @@ print("Allocated cores = ", allocated_cores, "Number of iterations = ", iteratio
 
 # Create folder structure for each stage
 for i in range(5):
-    os.makedirs(f"{output_path}/stage_{i}", exist_ok=True)
+    os.makedirs(f"{output_path}/step_{i}", exist_ok=True)
 
 print(f"=== Starting production of {iterations_number} files with {events_per_chunk} events ===")
 
@@ -103,6 +103,7 @@ for iteration in range(iterations_number):
                     "--eta-min", str(args.eta_min), "--eta-max", str(args.eta_max),
                     "--phi-min", str(args.phi_min), "--phi-max", str(args.phi_max),
                     "--energy-min", str(args.energy_min), "--energy-max", str(args.energy_max),
+                    "--energy", "0",
                     "-s", str(seed), "--run-number", str(run_number)
                 ]
                 subprocess.run(cmd_evt, check=True)
