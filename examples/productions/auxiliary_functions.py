@@ -153,7 +153,7 @@ class LorenzettiMonitor:
             print('Not enought time samples')
             return None
 
-        remaining_iters = self.total_iters - (self.current_iter + 1)
+        remaining_iters = self.total_iters - self.current_iter
         estimated_seconds = remaining_iters * avg_iter_time
         return estimated_seconds
     
@@ -230,6 +230,11 @@ class LorenzettiMonitor:
     
     def _record_avg_time(self):
         lines = []
+
+        avg_iter = self._avg_iteration_time()
+        h1, m1, s1 = format_time(avg_iter)
+        lines.append(f"Average Time Per Iteration: ~{h1}h {m1}m {s1}s")
+
         lines.append("--- Average Time Per Step ---")
         for step_name, avg in self._avg_step_time().items():
             n = len(self.step_times[step_name])
