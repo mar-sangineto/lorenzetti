@@ -49,6 +49,7 @@ class LorenzettiMonitor:
         self.total_iters = args.iterations
 
         self.global_start_time = time.time()
+        self.global_start_datetime = datetime.now()
         self._step_start_time = self.global_start_time
 
         self.step_times = {
@@ -179,6 +180,7 @@ class LorenzettiMonitor:
         lines.append("LORENZETTI LIVE STATUS DASHBOARD\n")
         lines.append("=========================================\n")
         # lines.append(f"Node Hostname: {socket.gethostname()}\n")
+        lines.append(f"Started: {self.global_start_datetime.strftime('%Y-%m-%d %H:%M:%S')}\n")
         lines.append(f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         lines.append(f"Currently processing: Iteration {self.current_iter} (Running {self.current_step_name})\n")
         lines.append(f"Progress: {self.current_iter + 1} / {self.total_iters} Iterations\n\n")
