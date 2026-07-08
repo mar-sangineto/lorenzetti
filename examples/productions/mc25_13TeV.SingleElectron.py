@@ -1,5 +1,6 @@
 import os
 import sys
+import random
 import subprocess
 import argparse
 import time # can be present just on auxiliary functions
@@ -42,6 +43,12 @@ parser.add_argument('--energy-bins', type=int, default=50,
 parser.add_argument('--proc-id', type=int, default=0, help="Current job ID") # in case of parallelizing the iteration in the cluster
 parser.add_argument('--cluster-id', type=int, default=0, help="Cluster submission ID (prevents overwriting runs)") # for the cluster working in parallel queue instead of the iteration
 
+# seed / reproducibility:
+parser.add_argument('--seed', type=int, nargs='+', default=None,
+                    help="Flag to reproducibility. Single value: base seed offset. "
+                         "Multiple values: exact per-iteration seeds (overrides --iterations). "
+                         "Omitted on a local run: random base seed, logged for later reuse. (default: None)")
+
 args = parser.parse_args()
 
 allocated_cores = args.cores
@@ -53,6 +60,29 @@ run_name = args.run_name if args.run_name else now.strftime("%Y%m%d_%H%M")
 
 if args.cluster_id:
     run_name = f"{run_name}_c{args.cluster_id}_{args.proc_id}"
+
+# Resolve the seed(s) for this run before the monitor is built, so status.txt
+# and the live-progress/time-estimate math stay consistent with the actual
+# number of iterations that will run.
+if args.seed and len(args.seed) > 1:
+    seed_mode = "list"
+    iterations_explicitly_set = any(a == '--iterations' or a.startswith('--iterations=') for a in sys.argv[1:])
+    if iterations_explicitly_set and args.iterations != len(args.seed):
+        print(f"WARNING: --iterations {args.iterations} is being overridden to {len(args.seed)} "
+              f"(the number of --seed values given).", file=sys.stderr)
+    iterations_number = len(args.seed)
+    args.iterations = len(args.seed)
+    print(f"Using explicit seed list: {args.seed}", file=sys.stderr, flush=True)
+else:
+    seed_mode = "base_offset"
+    if args.seed:
+        base_offset = args.seed[0]
+    elif args.cluster_id == 0 and args.proc_id == 0:
+        base_offset = random.SystemRandom().randint(1, 9_000)
+    else:
+        base_offset = 1
+    print(f"Run base seed: {base_offset} (pass --seed {base_offset} to reproduce this run)",
+          file=sys.stderr, flush=True)
 
 output_path=f"{args.out_path}/{run_name}"
 os.makedirs(output_path, exist_ok=True)
@@ -77,7 +107,13 @@ for iteration in range(iterations_number):
     print(f"==========================================")
     
     # Calculate a unique seed for each iteration or job based on ID
-    seed = args.cluster_id * 1_000_000 + args.proc_id * 10_000 + (1 + iteration)
+    if seed_mode == "list":
+        seed = args.seed[iteration]
+    elif args.seed:
+        # explicit single seed: use it as-is, ignoring --cluster-id/--proc-id
+        seed = base_offset if iterations_number == 1 else base_offset + iteration
+    else:
+        seed = args.cluster_id * 1_000_000 + args.proc_id * 10_000 + (base_offset + iteration)
     monitor.log_master_seed(iteration, seed)
     
     # Definition of file names for this specific iteration
